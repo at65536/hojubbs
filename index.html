@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>学校夏休み補充期間についてみんなで考える掲示板</title>
+    <title>学校夏休み補充期間についてみんなで考える掲示板 (Polis View)</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Chart.js（意見マップ描画用） -->
+    <!-- Chart.js（マップ描画用） -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { background-color: #f3f4f6; font-family: 'Helvetica Neue', Arial, sans-serif; }
@@ -28,9 +28,12 @@
 
     <div class="max-w-3xl mx-auto">
         <!-- ヘッダー -->
-        <header class="mb-8 text-center">
+        <header class="mb-6 text-center">
             <h1 class="text-2xl md:text-3xl font-bold text-gray-700 mb-2">学校夏休み補充期間についてみんなで考える掲示板</h1>
-            <p class="text-sm text-gray-500">学校の枠を越えて、匿名で意見を共有できます。<br>※誰が書いたか、誰が投票したかは記録されません。</p>
+            <p class="text-sm text-gray-500 mb-2">学校の枠を越えて、匿名で意見を共有できます。<br>※誰が書いたか、誰が投票したかは記録されません。</p>
+            <div class="inline-block bg-gray-200 text-gray-600 text-xs px-3 py-1 rounded-full">
+                あなたの匿名ID: <span id="displayUserId" class="font-mono font-bold">読み込み中...</span>
+            </div>
         </header>
 
         <!-- 投稿フォーム -->
@@ -45,24 +48,54 @@
             <p id="loadingMsg" class="text-sm text-blue-600 mt-2 hidden">送信中...</p>
         </div>
 
-        <!-- 🗺️ Polis風 2D意見マップ（Chart.js散布図） -->
+        <!-- 🗺️ Polis分析ビュー（タブ切り替え） -->
         <div class="bg-white p-5 rounded-lg shadow-sm border border-gray-200 mb-8">
-            <div class="flex justify-between items-center mb-2 flex-wrap gap-2">
-                <h2 class="text-lg font-semibold text-gray-700 flex items-center gap-1">
-                    <span>🗺️ 意見マップ (Polis View)</span>
-                </h2>
-                <span class="text-xs text-gray-500">ドットをクリックすると該当投稿へジャンプします</span>
+            <!-- タブ切り替えボタン -->
+            <div class="flex border-b border-gray-200 mb-4">
+                <button id="tabOpinionBtn" onclick="switchMapTab('opinion')" class="py-2 px-4 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 focus:outline-none">
+                    🗺️ 意見マップ (投稿ベース)
+                </button>
+                <button id="tabClusterBtn" onclick="switchMapTab('cluster')" class="py-2 px-4 font-semibold text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700 focus:outline-none">
+                    👥 参加者グループマップ (クラスタリング)
+                </button>
             </div>
-            <p class="text-xs text-gray-500 mb-4">
-                横軸＝賛成率 (0〜100%) ／ 縦軸＝注目度 (総投票数)
-            </p>
-            <div class="relative w-full h-64 md:h-80">
-                <canvas id="opinionMapCanvas"></canvas>
+
+            <!-- タブ1: 意見マップ -->
+            <div id="opinionTabView">
+                <div class="flex justify-between items-center mb-2 flex-wrap gap-2">
+                    <span class="text-xs text-gray-500">ドットをクリックすると該当投稿へジャンプします</span>
+                </div>
+                <p class="text-xs text-gray-500 mb-3">
+                    横軸＝賛成率 (0〜100%) ／ 縦軸＝注目度 (総投票数)
+                </p>
+                <div class="relative w-full h-64 md:h-80">
+                    <canvas id="opinionMapCanvas"></canvas>
+                </div>
+                <div class="flex justify-center gap-4 text-xs text-gray-600 mt-3 flex-wrap">
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full inline-block bg-emerald-500"></span> 🌟 合意点 (賛成率80%以上)</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full inline-block bg-amber-500"></span> ⚡ 対立点 (賛否拮抗)</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full inline-block bg-blue-500"></span> 🔵 その他の意見</span>
+                </div>
             </div>
-            <div class="flex justify-center gap-4 text-xs text-gray-600 mt-3 flex-wrap">
-                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full inline-block bg-emerald-500"></span> 🌟 合意点 (賛成率80%以上)</span>
-                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full inline-block bg-amber-500"></span> ⚡ 対立点 (賛否拮抗)</span>
-                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full inline-block bg-blue-500"></span> 🔵 その他の意見</span>
+
+            <!-- タブ2: クラスタリングマップ -->
+            <div id="clusterTabView" class="hidden">
+                <div class="mb-3">
+                    <p class="text-xs text-gray-600 mb-1">
+                        AI（機械学習）が投票パターンを分析し、似た意見傾向を持つ参加者をゆるやかにグループ化しています。
+                    </p>
+                    <div id="clusterSummaryInfo" class="text-xs font-semibold text-blue-800 bg-blue-50 p-2 rounded">
+                        データを分析中...
+                    </div>
+                </div>
+                <div class="relative w-full h-64 md:h-80">
+                    <canvas id="clusterMapCanvas"></canvas>
+                </div>
+                <div class="flex justify-center gap-4 text-xs text-gray-600 mt-3 flex-wrap">
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full inline-block bg-indigo-500"></span> 🔴 グループ A (傾向1)</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full inline-block bg-teal-500"></span> 🟢 グループ B (傾向2)</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full inline-block bg-purple-600"></span> ★ あなたの位置</span>
+                </div>
             </div>
         </div>
 
@@ -74,6 +107,7 @@
                 <select id="sortOrder" onchange="sortAndRenderPosts()" class="bg-white border border-gray-300 rounded-md text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400">
                     <option value="newest">新しい順</option>
                     <option value="oldest">古い順</option>
+                    <option value="cross_consensus">🌟 グループを超えた合意点優先</option>
                     <option value="most_voted">注目度順（投票数）</option>
                     <option value="agree_rate">賛成率順</option>
                     <option value="disagree_rate">反対率順</option>
@@ -89,14 +123,41 @@
 
     <script>
         // ★★★重要★★★：ご自身のGAS「WebアプリのURL」を設定してください
-        const GAS_URL = 'https://script.google.com/macros/s/AKfycbyksGxj5uNrCXExI3mjc25RyMV28eUJTv2NYq_rKmjptpxi3uLe47Dl1A-u1BOD5djztQ/exec'; 
+        const GAS_URL = 'YOUR_GAS_WEB_APP_URL_HERE';
 
+        let userId = '';
         let currentPosts = [];
+        let currentVotes = [];
+        let userVoteMap = {}; // local vote state cache: { postId: voteValue }
+
+        // クラスタ分析データ格納用
+        let clusterAnalysis = {
+            groupAUserIds: [],
+            groupBUserIds: [],
+            crossConsensusPostIds: [],
+            userCoordinates: {} // { userId: { x, y, group } }
+        };
+
         let opinionChart = null;
+        let clusterChart = null;
 
-        window.onload = loadPosts;
+        window.onload = function() {
+            userId = getOrCreateUserId();
+            document.getElementById('displayUserId').innerText = userId;
+            loadPosts();
+        };
 
-        // 投稿データの読み込み
+        // 匿名ユーザーIDの管理 (localStorage)
+        function getOrCreateUserId() {
+            let id = localStorage.getItem('polis_user_id');
+            if (!id) {
+                id = 'user_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36);
+                localStorage.setItem('polis_user_id', id);
+            }
+            return id;
+        }
+
+        // データの読み込み
         async function loadPosts() {
             if (!GAS_URL || GAS_URL === 'YOUR_GAS_WEB_APP_URL_HERE') {
                 document.getElementById('postsContainer').innerHTML = '<p class="text-red-500 text-center">※GASのURLが設定されていません。コード内の GAS_URL を変更してください。</p>';
@@ -105,12 +166,165 @@
 
             try {
                 const response = await fetch(GAS_URL);
-                currentPosts = await response.json();
+                const data = await response.json();
+                
+                // データ格納
+                currentPosts = data.posts || [];
+                currentVotes = data.votes || [];
+
+                // 自分の投票状態キャッシュの構築
+                userVoteMap = {};
+                currentVotes.forEach(v => {
+                    if (String(v.userId) === String(userId)) {
+                        userVoteMap[String(v.postId)] = Number(v.vote);
+                    }
+                });
+
+                // クラスタリング計算実行
+                runClusteringAnalysis();
+
+                // 描画更新
                 sortAndRenderPosts();
+                updateOpinionMap();
+                updateClusterMap();
+
             } catch (error) {
                 console.error("エラー:", error);
                 document.getElementById('postsContainer').innerHTML = '<p class="text-red-500 text-center">データの読み込みに失敗しました。</p>';
             }
+        }
+
+        // クラスタリング分析エンジン (ブラウザ側で計算)
+        function runClusteringAnalysis() {
+            if (!currentPosts || currentPosts.length === 0 || !currentVotes || currentVotes.length === 0) {
+                document.getElementById('clusterSummaryInfo').innerText = "投票データが蓄積されると、ここに意見グループが表示されます。";
+                return;
+            }
+
+            // 1. ユニークユーザーの抽出
+            const userSet = new Set(currentVotes.map(v => String(v.userId)));
+            const userList = Array.from(userSet);
+            const postList = currentPosts.map(p => String(p.id));
+
+            if (userList.length < 2) {
+                document.getElementById('clusterSummaryInfo').innerText = "クラスタ分類には最低2名以上の参加者が必要です。";
+                return;
+            }
+
+            // 2. 「ユーザー × 投稿」 行列の構築
+            // matrix[uIndex][pIndex] = 1 (賛成), -1 (反対), 0 (未投票/パス)
+            const matrix = userList.map(uId => {
+                return postList.map(pId => {
+                    const found = currentVotes.find(v => String(v.userId) === uId && String(v.postId) === pId);
+                    return found ? Number(found.vote) : 0;
+                });
+            });
+
+            // 3. 簡易 K-Means (2グループに分類)
+            // 初期セントロイド設定
+            let centroidA = matrix[0];
+            let centroidB = matrix[Math.floor(matrix.length / 2)] || matrix[0];
+
+            let groupAUsers = [];
+            let groupBUsers = [];
+
+            // 5回イテレーションして割り当てを最適化
+            for (let iter = 0; iter < 5; iter++) {
+                groupAUsers = [];
+                groupBUsers = [];
+
+                matrix.forEach((uVec, idx) => {
+                    const distA = euclideanDistance(uVec, centroidA);
+                    const distB = euclideanDistance(uVec, centroidB);
+
+                    if (distA <= distB) {
+                        groupAUsers.push(userList[idx]);
+                    } else {
+                        groupBUsers.push(userList[idx]);
+                    }
+                });
+
+                // セントロイド更新
+                if (groupAUsers.length > 0) centroidA = calculateMeanVector(groupAUsers, userList, matrix, postList.length);
+                if (groupBUsers.length > 0) centroidB = calculateMeanVector(groupBUsers, userList, matrix, postList.length);
+            }
+
+            clusterAnalysis.groupAUserIds = groupAUsers;
+            clusterAnalysis.groupBUserIds = groupBUsers;
+
+            // 4. 2次元座標化（簡易主成分分析/距離プロット）
+            clusterAnalysis.userCoordinates = {};
+            userList.forEach((uId, idx) => {
+                const vec = matrix[idx];
+                // X軸: パターンの第1主成分的スコア, Y軸: 積極性/第2スコア
+                let x = 0;
+                let y = 0;
+                vec.forEach((val, pIdx) => {
+                    x += val * (pIdx % 2 === 0 ? 1 : -1);
+                    y += Math.abs(val);
+                });
+
+                const isGroupA = groupAUsers.includes(uId);
+                clusterAnalysis.userCoordinates[uId] = {
+                    x: x + (isGroupA ? -0.5 : 0.5), // 表示用にゆるやかに左右に分ける
+                    y: y,
+                    group: isGroupA ? 'A' : 'B'
+                };
+            });
+
+            // 5. 「超党派の合意点 (Cross-Group Consensus)」の分析
+            clusterAnalysis.crossConsensusPostIds = [];
+            
+            if (groupAUsers.length > 0 && groupBUsers.length > 0) {
+                currentPosts.forEach(post => {
+                    const pId = String(post.id);
+
+                    // グループAの投票集計
+                    const votesA = currentVotes.filter(v => String(v.postId) === pId && groupAUsers.includes(String(v.userId)));
+                    const agreeA = votesA.filter(v => Number(v.vote) === 1).length;
+                    const totalA = votesA.filter(v => Number(v.vote) === 1 || Number(v.vote) === -1).length;
+                    const rateA = totalA > 0 ? (agreeA / totalA) : 0;
+
+                    // グループBの投票集計
+                    const votesB = currentVotes.filter(v => String(v.postId) === pId && groupBUsers.includes(String(v.userId)));
+                    const agreeB = votesB.filter(v => Number(v.vote) === 1).length;
+                    const totalB = votesB.filter(v => Number(v.vote) === 1 || Number(v.vote) === -1).length;
+                    const rateB = totalB > 0 ? (agreeB / totalB) : 0;
+
+                    // 条件：両グループとも賛成率が 70% 以上 (かつそれぞれで一定数以上の投票がある)
+                    if (rateA >= 0.7 && rateB >= 0.7 && totalA >= 1 && totalB >= 1) {
+                        clusterAnalysis.crossConsensusPostIds.push(pId);
+                    }
+                });
+            }
+
+            document.getElementById('clusterSummaryInfo').innerHTML = `
+                参加者数: <b>${userList.length}名</b> ｜ 🔴グループA: <b>${groupAUsers.length}名</b> ｜ 🟢グループB: <b>${groupBUsers.length}名</b>
+                ${clusterAnalysis.crossConsensusPostIds.length > 0 ? `｜ 🌟<b>${clusterAnalysis.crossConsensusPostIds.length}個の超党派合意点を発見！</b>` : ''}
+            `;
+        }
+
+        // 補助関数: ユーグリッド距離
+        function euclideanDistance(v1, v2) {
+            let sum = 0;
+            for (let i = 0; i < v1.length; i++) {
+                sum += Math.pow((v1[i] || 0) - (v2[i] || 0), 2);
+            }
+            return Math.sqrt(sum);
+        }
+
+        // 補助関数: ベクトルの平均計算
+        function calculateMeanVector(targetUserIds, allUserIds, matrix, vecLen) {
+            let mean = new Array(vecLen).fill(0);
+            targetUserIds.forEach(uId => {
+                const idx = allUserIds.indexOf(uId);
+                if (idx !== -1) {
+                    for (let i = 0; i < vecLen; i++) {
+                        mean[i] += matrix[idx][i];
+                    }
+                }
+            });
+            return mean.map(v => v / targetUserIds.length);
         }
 
         // 並び替え処理
@@ -118,7 +332,7 @@
             if (!currentPosts) currentPosts = [];
 
             const sortValue = document.getElementById('sortOrder')?.value || 'newest';
-            
+
             const sortedPosts = [...currentPosts].sort((a, b) => {
                 const agreeA = Number(a.agree) || 0;
                 const disagreeA = Number(a.disagree) || 0;
@@ -136,9 +350,13 @@
                 const agreeRateB = opinionTotalB > 0 ? (agreeB / opinionTotalB) : 0;
                 const disagreeRateB = opinionTotalB > 0 ? (disagreeB / opinionTotalB) : 0;
 
+                const isCrossA = clusterAnalysis.crossConsensusPostIds.includes(String(a.id)) ? 1 : 0;
+                const isCrossB = clusterAnalysis.crossConsensusPostIds.includes(String(b.id)) ? 1 : 0;
+
                 const dateA = new Date(a.timestamp).getTime() || 0;
                 const dateB = new Date(b.timestamp).getTime() || 0;
 
+                if (sortValue === 'cross_consensus') return isCrossB - isCrossA || totalB - totalA;
                 if (sortValue === 'newest') return dateB - dateA;
                 if (sortValue === 'oldest') return dateA - dateB;
                 if (sortValue === 'most_voted') return totalB !== totalA ? totalB - totalA : dateB - dateA;
@@ -148,10 +366,9 @@
             });
 
             renderPosts(sortedPosts);
-            updateChart(currentPosts);
         }
 
-        // 投稿一覧のHTML描画
+        // 投稿カードHTML描画
         function renderPosts(posts) {
             const container = document.getElementById('postsContainer');
             container.innerHTML = '';
@@ -162,8 +379,9 @@
             }
 
             posts.forEach(post => {
-                const currentVote = localStorage.getItem('voted_' + post.id); // 'agree', 'disagree', 'pass', or null
-                
+                const currentVoteVal = userVoteMap[String(post.id)]; 
+                // 1: agree, -1: disagree, 0: pass, undefined: null
+
                 const dateObj = new Date(post.timestamp);
                 const dateStr = isNaN(dateObj.getTime()) ? '' : `${dateObj.getFullYear()}/${dateObj.getMonth()+1}/${dateObj.getDate()} ${dateObj.getHours()}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
 
@@ -172,29 +390,33 @@
                 const passCount = Number(post.pass) || 0;
                 const totalVotes = agreeCount + disagreeCount + passCount;
 
-                // Polis風ハイライトバッジの判定
+                // バッジの判定
                 let badgeHtml = '';
-                if (totalVotes >= 3) {
+                const isCrossConsensus = clusterAnalysis.crossConsensusPostIds.includes(String(post.id));
+
+                if (isCrossConsensus) {
+                    badgeHtml = '<div class="inline-block bg-purple-100 text-purple-900 text-xs font-bold px-3 py-1 rounded mb-3 border border-purple-300 shadow-sm">🌟 グループを超えた合意点 (Cross-Group Consensus)</div>';
+                } else if (totalVotes >= 3) {
                     const opinionVotes = agreeCount + disagreeCount;
                     if (opinionVotes > 0) {
                         const agreeRate = agreeCount / opinionVotes;
                         if (agreeRate >= 0.8) {
-                            badgeHtml = '<div class="inline-block bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded mb-3 border border-emerald-300">🌟 みんなの合意点 (Consensus)</div>';
+                            badgeHtml = '<div class="inline-block bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded mb-3 border border-emerald-300">🌟 全体合意点 (Consensus)</div>';
                         } else if (agreeRate >= 0.4 && agreeRate <= 0.6) {
                             badgeHtml = '<div class="inline-block bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded mb-3 border border-amber-300">⚡ 議論の分かれ目 (Divisive)</div>';
                         }
                     }
                 }
 
-                const agreeClass = currentVote === 'agree' 
+                const agreeClass = currentVoteVal === 1 
                     ? "voted-agree border border-blue-400" 
                     : "bg-gray-100 hover:bg-blue-50 text-gray-700 border border-gray-200";
                     
-                const disagreeClass = currentVote === 'disagree' 
+                const disagreeClass = currentVoteVal === -1 
                     ? "voted-disagree border border-red-400" 
                     : "bg-gray-100 hover:bg-red-50 text-gray-700 border border-gray-200";
 
-                const passClass = currentVote === 'pass'
+                const passClass = currentVoteVal === 0
                     ? "voted-pass border border-gray-400"
                     : "bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200";
 
@@ -205,15 +427,15 @@
                         <div class="flex justify-between items-center text-sm flex-wrap gap-2">
                             <span class="text-gray-400 text-xs">${dateStr}</span>
                             <div class="flex space-x-2 flex-wrap gap-1">
-                                <button id="agree-btn-${post.id}" onclick="vote('${post.id}', 'agree')" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${agreeClass}">
+                                <button id="agree-btn-${post.id}" onclick="vote('${post.id}', 1)" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${agreeClass}">
                                     <span>👍 賛成</span>
                                     <span class="font-bold ml-1">${agreeCount}</span>
                                 </button>
-                                <button id="disagree-btn-${post.id}" onclick="vote('${post.id}', 'disagree')" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${disagreeClass}">
+                                <button id="disagree-btn-${post.id}" onclick="vote('${post.id}', -1)" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${disagreeClass}">
                                     <span>👎 反対</span>
                                     <span class="font-bold ml-1">${disagreeCount}</span>
                                 </button>
-                                <button id="pass-btn-${post.id}" onclick="vote('${post.id}', 'pass')" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${passClass}">
+                                <button id="pass-btn-${post.id}" onclick="vote('${post.id}', 0)" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${passClass}">
                                     <span>❓ パス</span>
                                     <span class="font-bold ml-1">${passCount}</span>
                                 </button>
@@ -264,43 +486,21 @@
             }
         }
 
-        // 投票（トグル・変更）処理
-        async function vote(postId, clickedType) {
-            const agreeBtn = document.getElementById(`agree-btn-${postId}`);
-            const disagreeBtn = document.getElementById(`disagree-btn-${postId}`);
-            const passBtn = document.getElementById(`pass-btn-${postId}`);
-            if (agreeBtn) agreeBtn.disabled = true;
-            if (disagreeBtn) disagreeBtn.disabled = true;
-            if (passBtn) passBtn.disabled = true;
+        // 投票処理 (1: 賛成, -1: 反対, 0: パス)
+        async function vote(postId, targetVoteValue) {
+            const currentVoteVal = userVoteMap[String(postId)];
+            let newVoteValue = null;
 
-            const currentVote = localStorage.getItem('voted_' + postId);
-            let deltaAgree = 0;
-            let deltaDisagree = 0;
-            let deltaPass = 0;
-
-            if (currentVote === clickedType) {
-                if (clickedType === 'agree') deltaAgree = -1;
-                if (clickedType === 'disagree') deltaDisagree = -1;
-                if (clickedType === 'pass') deltaPass = -1;
-                localStorage.removeItem('voted_' + postId);
+            // すでに同じボタンが押されている場合は取り消し (null)
+            if (currentVoteVal === targetVoteValue) {
+                newVoteValue = null;
+                delete userVoteMap[String(postId)];
             } else {
-                if (currentVote === 'agree') deltaAgree = -1;
-                if (currentVote === 'disagree') deltaDisagree = -1;
-                if (currentVote === 'pass') deltaPass = -1;
-
-                if (clickedType === 'agree') deltaAgree += 1;
-                if (clickedType === 'disagree') deltaDisagree += 1;
-                if (clickedType === 'pass') deltaPass += 1;
-
-                localStorage.setItem('voted_' + postId, clickedType);
+                newVoteValue = targetVoteValue;
+                userVoteMap[String(postId)] = targetVoteValue;
             }
 
-            const postObj = currentPosts.find(p => p.id === postId);
-            if (postObj) {
-                postObj.agree = Math.max(0, (Number(postObj.agree) || 0) + deltaAgree);
-                postObj.disagree = Math.max(0, (Number(postObj.disagree) || 0) + deltaDisagree);
-                postObj.pass = Math.max(0, (Number(postObj.pass) || 0) + deltaPass);
-            }
+            // 楽観的UI更新
             sortAndRenderPosts();
 
             try {
@@ -309,23 +509,45 @@
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                     body: JSON.stringify({
                         action: 'vote',
+                        userId: userId,
                         id: postId,
-                        deltaAgree: deltaAgree,
-                        deltaDisagree: deltaDisagree,
-                        deltaPass: deltaPass
+                        voteValue: newVoteValue
                     })
                 });
+                
+                // 最新データを再読み込み
+                await loadPosts();
             } catch (error) {
                 console.error("投票送信エラー:", error);
             }
         }
 
-        // 🗺️ Chart.js 意見マップ（散布図）の更新
-        function updateChart(posts) {
+        // タブ切り替え制御
+        function switchMapTab(tabType) {
+            const opBtn = document.getElementById('tabOpinionBtn');
+            const clBtn = document.getElementById('tabClusterBtn');
+            const opView = document.getElementById('opinionTabView');
+            const clView = document.getElementById('clusterTabView');
+
+            if (tabType === 'opinion') {
+                opBtn.className = "py-2 px-4 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 focus:outline-none";
+                clBtn.className = "py-2 px-4 font-semibold text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700 focus:outline-none";
+                opView.classList.remove('hidden');
+                clView.classList.add('hidden');
+            } else {
+                clBtn.className = "py-2 px-4 font-semibold text-sm border-b-2 border-blue-600 text-blue-600 focus:outline-none";
+                opBtn.className = "py-2 px-4 font-semibold text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700 focus:outline-none";
+                clView.classList.remove('hidden');
+                opView.classList.add('hidden');
+            }
+        }
+
+        // 🗺️ Chart.js 1: 意見マップ (投稿ベース)
+        function updateOpinionMap() {
             const canvas = document.getElementById('opinionMapCanvas');
             if (!canvas) return;
 
-            const plotData = posts.map(post => {
+            const plotData = currentPosts.map(post => {
                 const agree = Number(post.agree) || 0;
                 const disagree = Number(post.disagree) || 0;
                 const pass = Number(post.pass) || 0;
@@ -334,9 +556,11 @@
                 
                 const agreeRate = opinionVotes > 0 ? Math.round((agree / opinionVotes) * 100) : 50;
 
-                let color = '#3b82f6'; // デフォルト：青
-                if (totalVotes >= 3) {
-                    if (agreeRate >= 80) color = '#10b981'; // 合意点：緑
+                let color = '#3b82f6'; // 青
+                if (clusterAnalysis.crossConsensusPostIds.includes(String(post.id))) {
+                    color = '#a855f7'; // グループ超過合意：紫
+                } else if (totalVotes >= 3) {
+                    if (agreeRate >= 80) color = '#10b981'; // 全体合意：緑
                     else if (agreeRate >= 40 && agreeRate <= 60) color = '#f59e0b'; // 対立点：オレンジ
                 }
 
@@ -345,25 +569,19 @@
                     y: totalVotes,
                     postId: post.id,
                     text: post.text || '',
-                    agree: agree,
-                    disagree: disagree,
-                    pass: pass,
                     color: color
                 };
             });
 
             const maxVotes = Math.max(...plotData.map(d => d.y), 5);
 
-            if (opinionChart) {
-                opinionChart.destroy();
-            }
+            if (opinionChart) opinionChart.destroy();
 
             const ctx = canvas.getContext('2d');
             opinionChart = new Chart(ctx, {
                 type: 'scatter',
                 data: {
                     datasets: [{
-                        label: '意見',
                         data: plotData,
                         backgroundColor: plotData.map(d => d.color),
                         pointRadius: 8,
@@ -378,45 +596,97 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    const point = context.raw;
-                                    const shortText = point.text.length > 25 ? point.text.substring(0, 25) + '...' : point.text;
-                                    return `「${shortText}」 (賛成率: ${point.x}%, 投票数: ${point.y})`;
+                                    const p = context.raw;
+                                    const short = p.text.length > 25 ? p.text.substring(0, 25) + '...' : p.text;
+                                    return `「${short}」 (賛成率: ${p.x}%, 投票数: ${p.y})`;
                                 }
                             }
                         }
                     },
                     scales: {
-                        x: {
-                            min: 0,
-                            max: 100,
-                            title: { display: true, text: '賛成率 (%)', color: '#6b7280' },
-                            grid: { color: '#e5e7eb' }
-                        },
-                        y: {
-                            min: 0,
-                            max: maxVotes + 1,
-                            title: { display: true, text: '注目度 (総投票数)', color: '#6b7280' },
-                            ticks: { stepSize: 1 },
-                            grid: { color: '#e5e7eb' }
-                        }
+                        x: { min: 0, max: 100, title: { display: true, text: '賛成率 (%)' } },
+                        y: { min: 0, max: maxVotes + 1, title: { display: true, text: '注目度 (総投票数)' }, ticks: { stepSize: 1 } }
                     },
                     onClick: (e, elements) => {
                         if (elements.length > 0) {
-                            const index = elements[0].index;
-                            const clickedPoint = plotData[index];
-                            if (clickedPoint && clickedPoint.postId) {
-                                const targetCard = document.getElementById(`card-${clickedPoint.postId}`);
-                                if (targetCard) {
-                                    targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    targetCard.classList.remove('highlight-card');
-                                    void targetCard.offsetWidth; // リフロー発生させてアニメーション再適用
-                                    targetCard.classList.add('highlight-card');
-                                }
-                            }
+                            const point = plotData[elements[0].index];
+                            if (point && point.postId) scrollToCard(point.postId);
                         }
                     }
                 }
             });
+        }
+
+        // 🗺️ Chart.js 2: 参加者クラスタリングマップ
+        function updateClusterMap() {
+            const canvas = document.getElementById('clusterMapCanvas');
+            if (!canvas) return;
+
+            const coords = clusterAnalysis.userCoordinates || {};
+            const plotData = [];
+
+            Object.keys(coords).forEach(uId => {
+                const item = coords[uId];
+                const isMe = String(uId) === String(userId);
+                
+                let color = item.group === 'A' ? '#6366f1' : '#14b8a6'; // インディゴ(GroupA) or ティール(GroupB)
+                if (isMe) color = '#9333ea'; // 自分は濃い紫色
+
+                plotData.push({
+                    x: item.x,
+                    y: item.y,
+                    uId: uId,
+                    group: item.group,
+                    isMe: isMe,
+                    color: color,
+                    radius: isMe ? 12 : 7
+                });
+            });
+
+            if (clusterChart) clusterChart.destroy();
+
+            const ctx = canvas.getContext('2d');
+            clusterChart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        data: plotData,
+                        backgroundColor: plotData.map(d => d.color),
+                        pointRadius: plotData.map(d => d.radius),
+                        pointHoverRadius: 14
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const p = context.raw;
+                                    return `${p.isMe ? '★ あなた' : '参加者'} (グループ ${p.group})`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { display: false },
+                        y: { display: false }
+                    }
+                }
+            });
+        }
+
+        // カードへのスクロール＆強調処理
+        function scrollToCard(postId) {
+            const targetCard = document.getElementById(`card-${postId}`);
+            if (targetCard) {
+                targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                targetCard.classList.remove('highlight-card');
+                void targetCard.offsetWidth;
+                targetCard.classList.add('highlight-card');
+            }
         }
 
         function escapeHTML(str) {
