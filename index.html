@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学校夏休み補充期間についてみんなで考える掲示板</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #f3f4f6; font-family: 'Helvetica Neue', Arial, sans-serif; }
+        .post-card { transition: all 0.2s; }
+        .post-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+        .disabled-btn { opacity: 0.5; cursor: not-allowed; }
+        /* 自分が投票中のボタンのハイライトスタイル */
+        .voted-agree { background-color: #dbeafe !important; color: #1d4ed8 !important; border-color: #3b82f6 !important; font-weight: bold; }
+        .voted-disagree { background-color: #fee2e2 !important; color: #b91c1c !important; border-color: #ef4444 !important; font-weight: bold; }
+        .voted-pass { background-color: #e5e7eb !important; color: #374151 !important; border-color: #6b7280 !important; font-weight: bold; }
+    </style>
+</head>
+<body class="text-gray-800 p-4 md:p-8">
+
+    <div class="max-w-3xl mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-gray-700 mb-2">学校夏休み補充期間についてみんなで考える掲示板</h1>
+            <p class="text-sm text-gray-500">学校の枠を越えて、匿名で意見を共有できます。<br>※誰が書いたか、誰が投票したかは記録されません。</p>
+        </header>
+
+        <!-- 投稿フォーム -->
+        <div class="bg-white p-6 rounded-lg shadow-sm mb-8 border border-gray-200">
+            <h2 class="text-lg font-semibold mb-3">新しい意見を投稿する</h2>
+            <textarea id="postText" class="w-full border border-gray-300 rounded p-3 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent mb-1" rows="3" placeholder="夏休みの補充期間について自由に意見を書いてください。&#10;※特定の個人への誹謗中傷等は禁止です。"></textarea>
+            <div id="errorMsg" class="text-red-500 text-sm mb-2 hidden"></div>
+            <p class="text-xs text-gray-500 mb-3">※特定の個人への誹謗中傷等は禁止です。</p>
+            <div class="text-right">
+                <button id="submitBtn" onclick="submitPost()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded shadow">投稿する</button>
+            </div>
+            <p id="loadingMsg" class="text-sm text-blue-600 mt-2 hidden">送信中...</p>
+        </div>
+
+        <!-- 並び替えコントローラー -->
+        <div class="flex justify-between items-center mb-4 px-1 flex-wrap gap-2">
+            <h2 class="text-lg font-semibold text-gray-700">みんなの意見</h2>
+            <div class="flex items-center space-x-2">
+                <label for="sortOrder" class="text-sm font-medium text-gray-600">並び替え:</label>
+                <select id="sortOrder" onchange="sortAndRenderPosts()" class="bg-white border border-gray-300 rounded-md text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <option value="newest">新しい順</option>
+                    <option value="oldest">古い順</option>
+                    <option value="most_voted">注目度順（投票数）</option>
+                    <option value="agree_rate">賛成率順</option>
+                    <option value="disagree_rate">反対率順</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 投稿一覧エリア -->
+        <div id="postsContainer" class="space-y-4">
+            <p class="text-center text-gray-500">データを読み込んでいます...</p>
+        </div>
+    </div>
+
+    <script>
+        // ★★★重要★★★：GASの「WebアプリのURL」をここに貼り付けます
+        const GAS_URL = 'https://script.google.com/macros/s/AKfycbyksGxj5uNrCXExI3mjc25RyMV28eUJTv2NYq_rKmjptpxi3uLe47Dl1A-u1BOD5djztQ/exec'; 
+
+        // 取得した投稿データを保持する配列
+        let currentPosts = [];
+
+        // ページ読み込み時に投稿を取得する
+        window.onload = loadPosts;
+
+        // 投稿一覧を取得して画面に表示する関数
+        async function loadPosts() {
+            if (!GAS_URL || GAS_URL === 'YOUR_GAS_WEB_APP_URL_HERE') {
+                document.getElementById('postsContainer').innerHTML = '<p class="text-red-500 text-center">※GASのURLが設定されていません。コード内の GAS_URL を変更してください。</p>';
+                return;
+            }
+
+            try {
+                const response = await fetch(GAS_URL);
+                currentPosts = await response.json();
+                sortAndRenderPosts();
+            } catch (error) {
+                console.error("エラー:", error);
+                document.getElementById('postsContainer').innerHTML = '<p class="text-red-500 text-center">データの読み込みに失敗しました。</p>';
+            }
+        }
+
+        function sortAndRenderPosts() {
+            if (!currentPosts || currentPosts.length === 0) {
+                renderPosts([]);
+                return;
+            }
+
+            const sortValue = document.getElementById('sortOrder')?.value || 'newest';
+            
+            const sortedPosts = [...currentPosts].sort((a, b) => {
+                const agreeA = Number(a.agree) || 0;
+                const disagreeA = Number(a.disagree) || 0;
+                const passA = Number(a.pass) || 0;
+                const totalA = agreeA + disagreeA + passA;
+                const opinionTotalA = agreeA + disagreeA;
+                const agreeRateA = opinionTotalA > 0 ? (agreeA / opinionTotalA) : 0;
+                const disagreeRateA = opinionTotalA > 0 ? (disagreeA / opinionTotalA) : 0;
+
+                const agreeB = Number(b.agree) || 0;
+                const disagreeB = Number(b.disagree) || 0;
+                const passB = Number(b.pass) || 0;
+                const totalB = agreeB + disagreeB + passB;
+                const opinionTotalB = agreeB + disagreeB;
+                const agreeRateB = opinionTotalB > 0 ? (agreeB / opinionTotalB) : 0;
+                const disagreeRateB = opinionTotalB > 0 ? (disagreeB / opinionTotalB) : 0;
+
+                const dateA = new Date(a.timestamp).getTime() || 0;
+                const dateB = new Date(b.timestamp).getTime() || 0;
+
+                if (sortValue === 'newest') {
+                    return dateB - dateA;
+                } else if (sortValue === 'oldest') {
+                    return dateA - dateB;
+                } else if (sortValue === 'most_voted') {
+                    if (totalB !== totalA) return totalB - totalA;
+                    return dateB - dateA;
+                } else if (sortValue === 'agree_rate') {
+                    if (agreeRateB !== agreeRateA) return agreeRateB - agreeRateA;
+                    if (agreeB !== agreeA) return agreeB - agreeA;
+                    return dateB - dateA;
+                } else if (sortValue === 'disagree_rate') {
+                    if (disagreeRateB !== disagreeRateA) return disagreeRateB - disagreeRateA;
+                    if (disagreeB !== disagreeA) return disagreeB - disagreeA;
+                    return dateB - dateA;
+                }
+                return 0;
+            });
+
+            renderPosts(sortedPosts);
+        }
+
+        function renderPosts(posts) {
+            const container = document.getElementById('postsContainer');
+            container.innerHTML = '';
+
+            if (!posts || posts.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500">まだ投稿がありません。</p>';
+                return;
+            }
+
+            posts.forEach(post => {
+                const currentVote = localStorage.getItem('voted_' + post.id); // 'agree', 'disagree', 'pass', or null
+                
+                const dateObj = new Date(post.timestamp);
+                const dateStr = isNaN(dateObj.getTime()) ? '' : `${dateObj.getFullYear()}/${dateObj.getMonth()+1}/${dateObj.getDate()} ${dateObj.getHours()}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+
+                const agreeCount = Number(post.agree) || 0;
+                const disagreeCount = Number(post.disagree) || 0;
+                const passCount = Number(post.pass) || 0;
+                const totalVotes = agreeCount + disagreeCount + passCount;
+
+                // Polis風ハイライトバッジの判定
+                let badgeHtml = '';
+                if (totalVotes >= 3) {
+                    const opinionVotes = agreeCount + disagreeCount;
+                    if (opinionVotes > 0) {
+                        const agreeRate = agreeCount / opinionVotes;
+                        if (agreeRate >= 0.8) {
+                            badgeHtml = '<div class="inline-block bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded mb-3 border border-emerald-300">🌟 みんなの合意点 (Consensus)</div>';
+                        } else if (agreeRate >= 0.4 && agreeRate <= 0.6) {
+                            badgeHtml = '<div class="inline-block bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded mb-3 border border-amber-300">⚡ 議論の分かれ目 (Divisive)</div>';
+                        }
+                    }
+                }
+
+                // ボタンのスタイル設定
+                const agreeClass = currentVote === 'agree' 
+                    ? "voted-agree border border-blue-400" 
+                    : "bg-gray-100 hover:bg-blue-50 text-gray-700 border border-gray-200";
+                    
+                const disagreeClass = currentVote === 'disagree' 
+                    ? "voted-disagree border border-red-400" 
+                    : "bg-gray-100 hover:bg-red-50 text-gray-700 border border-gray-200";
+
+                const passClass = currentVote === 'pass'
+                    ? "voted-pass border border-gray-400"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200";
+
+                const cardHtml = `
+                    <div class="bg-white p-5 rounded-lg shadow-sm border border-gray-200 post-card">
+                        ${badgeHtml}
+                        <p class="text-gray-800 text-lg mb-4 whitespace-pre-wrap">${escapeHTML(post.text || '')}</p>
+                        <div class="flex justify-between items-center text-sm flex-wrap gap-2">
+                            <span class="text-gray-400">${dateStr}</span>
+                            <div class="flex space-x-2 flex-wrap gap-1" id="actions-${post.id}">
+                                <!-- 賛成ボタン -->
+                                <button id="agree-btn-${post.id}" onclick="vote('${post.id}', 'agree')" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${agreeClass}">
+                                    <span>👍 賛成</span>
+                                    <span class="font-bold ml-1">${agreeCount}</span>
+                                </button>
+                                <!-- 反対ボタン -->
+                                <button id="disagree-btn-${post.id}" onclick="vote('${post.id}', 'disagree')" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${disagreeClass}">
+                                    <span>👎 反対</span>
+                                    <span class="font-bold ml-1">${disagreeCount}</span>
+                                </button>
+                                <!-- パスボタン -->
+                                <button id="pass-btn-${post.id}" onclick="vote('${post.id}', 'pass')" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${passClass}">
+                                    <span>❓ パス</span>
+                                    <span class="font-bold ml-1">${passCount}</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', cardHtml);
+            });
+        }
+
+        async function submitPost() {
+            const textInput = document.getElementById('postText').value.trim();
+            const errorElement = document.getElementById('errorMsg');
+            
+            if (!textInput) {
+                if (errorElement) {
+                    errorElement.innerText = "内容を入力してください。";
+                    errorElement.classList.remove('hidden');
+                }
+                return;
+            }
+
+            if (errorElement) {
+                errorElement.classList.add('hidden');
+            }
+
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('loadingMsg').classList.remove('hidden');
+
+            const payload = {
+                action: 'post',
+                text: textInput
+            };
+
+            try {
+                await fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
+                });
+                
+                document.getElementById('postText').value = '';
+                await loadPosts();
+            } catch (error) {
+                console.error("投稿エラー:", error);
+                if (errorElement) {
+                    errorElement.innerText = "投稿の送信に失敗しました。";
+                    errorElement.classList.remove('hidden');
+                }
+            } finally {
+                document.getElementById('submitBtn').disabled = false;
+                document.getElementById('loadingMsg').classList.add('hidden');
+            }
+        }
+
+        async function vote(postId, clickedType) {
+            // 連打防止：該当ボタンをロック
+            const agreeBtn = document.getElementById(`agree-btn-${postId}`);
+            const disagreeBtn = document.getElementById(`disagree-btn-${postId}`);
+            const passBtn = document.getElementById(`pass-btn-${postId}`);
+            if (agreeBtn) agreeBtn.disabled = true;
+            if (disagreeBtn) disagreeBtn.disabled = true;
+            if (passBtn) passBtn.disabled = true;
+
+            const currentVote = localStorage.getItem('voted_' + postId); // 'agree', 'disagree', 'pass', or null
+            let deltaAgree = 0;
+            let deltaDisagree = 0;
+            let deltaPass = 0;
+
+            if (currentVote === clickedType) {
+                // 【パターン1: 同じボタンを再クリック】➔ リセット
+                if (clickedType === 'agree') deltaAgree = -1;
+                if (clickedType === 'disagree') deltaDisagree = -1;
+                if (clickedType === 'pass') deltaPass = -1;
+                localStorage.removeItem('voted_' + postId);
+            } else {
+                // 【パターン2: 新規または切り替え】
+                // 既存の投票を引く
+                if (currentVote === 'agree') deltaAgree = -1;
+                if (currentVote === 'disagree') deltaDisagree = -1;
+                if (currentVote === 'pass') deltaPass = -1;
+
+                // 新しい投票を足す
+                if (clickedType === 'agree') deltaAgree += 1;
+                if (clickedType === 'disagree') deltaDisagree += 1;
+                if (clickedType === 'pass') deltaPass += 1;
+
+                localStorage.setItem('voted_' + postId, clickedType);
+            }
+
+            // ローカルで即座に計算してUI反映
+            const postObj = currentPosts.find(p => p.id === postId);
+            if (postObj) {
+                postObj.agree = Math.max(0, (Number(postObj.agree) || 0) + deltaAgree);
+                postObj.disagree = Math.max(0, (Number(postObj.disagree) || 0) + deltaDisagree);
+                postObj.pass = Math.max(0, (Number(postObj.pass) || 0) + deltaPass);
+            }
+            sortAndRenderPosts();
+
+            // GASへデータ送信
+            const payload = {
+                action: 'vote',
+                id: postId,
+                deltaAgree: deltaAgree,
+                deltaDisagree: deltaDisagree,
+                deltaPass: deltaPass
+            };
+
+            try {
+                await fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
+                });
+            } catch (error) {
+                console.error("投票送信エラー:", error);
+            }
+        }
+
+        function escapeHTML(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+    </script>
+</body>
+</html>
