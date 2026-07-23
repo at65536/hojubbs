@@ -4,30 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>学校夏休み補充期間についてみんなで考える掲示板</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js（意見マップ描画用） -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { background-color: #f3f4f6; font-family: 'Helvetica Neue', Arial, sans-serif; }
         .post-card { transition: all 0.2s; }
         .post-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
-        .disabled-btn { opacity: 0.5; cursor: not-allowed; }
-        /* 自分が投票中のボタンのハイライトスタイル */
+        /* 自分が投票中のボタンハイライト */
         .voted-agree { background-color: #dbeafe !important; color: #1d4ed8 !important; border-color: #3b82f6 !important; font-weight: bold; }
         .voted-disagree { background-color: #fee2e2 !important; color: #b91c1c !important; border-color: #ef4444 !important; font-weight: bold; }
         .voted-pass { background-color: #e5e7eb !important; color: #374151 !important; border-color: #6b7280 !important; font-weight: bold; }
+        /* グラフクリック時の強調フラッシュアニメーション */
+        .highlight-card { animation: highlight 2s ease-in-out; }
+        @keyframes highlight {
+            0% { background-color: #fef08a; }
+            100% { background-color: #ffffff; }
+        }
     </style>
 </head>
 <body class="text-gray-800 p-4 md:p-8">
 
     <div class="max-w-3xl mx-auto">
+        <!-- ヘッダー -->
         <header class="mb-8 text-center">
-            <h1 class="text-3xl font-bold text-gray-700 mb-2">学校夏休み補充期間についてみんなで考える掲示板</h1>
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-700 mb-2">学校夏休み補充期間についてみんなで考える掲示板</h1>
             <p class="text-sm text-gray-500">学校の枠を越えて、匿名で意見を共有できます。<br>※誰が書いたか、誰が投票したかは記録されません。</p>
         </header>
 
         <!-- 投稿フォーム -->
         <div class="bg-white p-6 rounded-lg shadow-sm mb-8 border border-gray-200">
             <h2 class="text-lg font-semibold mb-3">新しい意見を投稿する</h2>
-            <textarea id="postText" class="w-full border border-gray-300 rounded p-3 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent mb-1" rows="3" placeholder="夏休みの補充期間について自由に意見を書いてください。&#10;※特定の個人への誹謗中傷等は禁止です。"></textarea>
+            <textarea id="postText" class="w-full border border-gray-300 rounded p-3 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent mb-1" rows="3" placeholder="夏休みの補充期間について自由に意見を書いてください。"></textarea>
             <div id="errorMsg" class="text-red-500 text-sm mb-2 hidden"></div>
             <p class="text-xs text-gray-500 mb-3">※特定の個人への誹謗中傷等は禁止です。</p>
             <div class="text-right">
@@ -36,7 +45,28 @@
             <p id="loadingMsg" class="text-sm text-blue-600 mt-2 hidden">送信中...</p>
         </div>
 
-        <!-- 並び替えコントローラー -->
+        <!-- 🗺️ Polis風 2D意見マップ（Chart.js散布図） -->
+        <div class="bg-white p-5 rounded-lg shadow-sm border border-gray-200 mb-8">
+            <div class="flex justify-between items-center mb-2 flex-wrap gap-2">
+                <h2 class="text-lg font-semibold text-gray-700 flex items-center gap-1">
+                    <span>🗺️ 意見マップ (Polis View)</span>
+                </h2>
+                <span class="text-xs text-gray-500">ドットをクリックすると該当投稿へジャンプします</span>
+            </div>
+            <p class="text-xs text-gray-500 mb-4">
+                横軸＝賛成率 (0〜100%) ／ 縦軸＝注目度 (総投票数)
+            </p>
+            <div class="relative w-full h-64 md:h-80">
+                <canvas id="opinionMapCanvas"></canvas>
+            </div>
+            <div class="flex justify-center gap-4 text-xs text-gray-600 mt-3 flex-wrap">
+                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full inline-block bg-emerald-500"></span> 🌟 合意点 (賛成率80%以上)</span>
+                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full inline-block bg-amber-500"></span> ⚡ 対立点 (賛否拮抗)</span>
+                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full inline-block bg-blue-500"></span> 🔵 その他の意見</span>
+            </div>
+        </div>
+
+        <!-- コントローラー（投稿一覧の見出し ＆ 並び替え） -->
         <div class="flex justify-between items-center mb-4 px-1 flex-wrap gap-2">
             <h2 class="text-lg font-semibold text-gray-700">みんなの意見</h2>
             <div class="flex items-center space-x-2">
@@ -58,16 +88,15 @@
     </div>
 
     <script>
-        // ★★★重要★★★：GASの「WebアプリのURL」をここに貼り付けます
+        // ★★★重要★★★：ご自身のGAS「WebアプリのURL」を設定してください
         const GAS_URL = 'https://script.google.com/macros/s/AKfycbyksGxj5uNrCXExI3mjc25RyMV28eUJTv2NYq_rKmjptpxi3uLe47Dl1A-u1BOD5djztQ/exec'; 
 
-        // 取得した投稿データを保持する配列
         let currentPosts = [];
+        let opinionChart = null;
 
-        // ページ読み込み時に投稿を取得する
         window.onload = loadPosts;
 
-        // 投稿一覧を取得して画面に表示する関数
+        // 投稿データの読み込み
         async function loadPosts() {
             if (!GAS_URL || GAS_URL === 'YOUR_GAS_WEB_APP_URL_HERE') {
                 document.getElementById('postsContainer').innerHTML = '<p class="text-red-500 text-center">※GASのURLが設定されていません。コード内の GAS_URL を変更してください。</p>';
@@ -84,11 +113,9 @@
             }
         }
 
+        // 並び替え処理
         function sortAndRenderPosts() {
-            if (!currentPosts || currentPosts.length === 0) {
-                renderPosts([]);
-                return;
-            }
+            if (!currentPosts) currentPosts = [];
 
             const sortValue = document.getElementById('sortOrder')?.value || 'newest';
             
@@ -112,34 +139,25 @@
                 const dateA = new Date(a.timestamp).getTime() || 0;
                 const dateB = new Date(b.timestamp).getTime() || 0;
 
-                if (sortValue === 'newest') {
-                    return dateB - dateA;
-                } else if (sortValue === 'oldest') {
-                    return dateA - dateB;
-                } else if (sortValue === 'most_voted') {
-                    if (totalB !== totalA) return totalB - totalA;
-                    return dateB - dateA;
-                } else if (sortValue === 'agree_rate') {
-                    if (agreeRateB !== agreeRateA) return agreeRateB - agreeRateA;
-                    if (agreeB !== agreeA) return agreeB - agreeA;
-                    return dateB - dateA;
-                } else if (sortValue === 'disagree_rate') {
-                    if (disagreeRateB !== disagreeRateA) return disagreeRateB - disagreeRateA;
-                    if (disagreeB !== disagreeA) return disagreeB - disagreeA;
-                    return dateB - dateA;
-                }
+                if (sortValue === 'newest') return dateB - dateA;
+                if (sortValue === 'oldest') return dateA - dateB;
+                if (sortValue === 'most_voted') return totalB !== totalA ? totalB - totalA : dateB - dateA;
+                if (sortValue === 'agree_rate') return agreeRateB !== agreeRateA ? agreeRateB - agreeRateA : totalB - totalA;
+                if (sortValue === 'disagree_rate') return disagreeRateB !== disagreeRateA ? disagreeRateB - disagreeRateA : totalB - totalA;
                 return 0;
             });
 
             renderPosts(sortedPosts);
+            updateChart(currentPosts);
         }
 
+        // 投稿一覧のHTML描画
         function renderPosts(posts) {
             const container = document.getElementById('postsContainer');
             container.innerHTML = '';
 
             if (!posts || posts.length === 0) {
-                container.innerHTML = '<p class="text-center text-gray-500">まだ投稿がありません。</p>';
+                container.innerHTML = '<p class="text-center text-gray-500 py-8">まだ投稿がありません。最初の意見を投稿してみましょう！</p>';
                 return;
             }
 
@@ -168,7 +186,6 @@
                     }
                 }
 
-                // ボタンのスタイル設定
                 const agreeClass = currentVote === 'agree' 
                     ? "voted-agree border border-blue-400" 
                     : "bg-gray-100 hover:bg-blue-50 text-gray-700 border border-gray-200";
@@ -182,23 +199,20 @@
                     : "bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200";
 
                 const cardHtml = `
-                    <div class="bg-white p-5 rounded-lg shadow-sm border border-gray-200 post-card">
+                    <div id="card-${post.id}" class="bg-white p-5 rounded-lg shadow-sm border border-gray-200 post-card">
                         ${badgeHtml}
                         <p class="text-gray-800 text-lg mb-4 whitespace-pre-wrap">${escapeHTML(post.text || '')}</p>
                         <div class="flex justify-between items-center text-sm flex-wrap gap-2">
-                            <span class="text-gray-400">${dateStr}</span>
-                            <div class="flex space-x-2 flex-wrap gap-1" id="actions-${post.id}">
-                                <!-- 賛成ボタン -->
+                            <span class="text-gray-400 text-xs">${dateStr}</span>
+                            <div class="flex space-x-2 flex-wrap gap-1">
                                 <button id="agree-btn-${post.id}" onclick="vote('${post.id}', 'agree')" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${agreeClass}">
                                     <span>👍 賛成</span>
                                     <span class="font-bold ml-1">${agreeCount}</span>
                                 </button>
-                                <!-- 反対ボタン -->
                                 <button id="disagree-btn-${post.id}" onclick="vote('${post.id}', 'disagree')" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${disagreeClass}">
                                     <span>👎 反対</span>
                                     <span class="font-bold ml-1">${disagreeCount}</span>
                                 </button>
-                                <!-- パスボタン -->
                                 <button id="pass-btn-${post.id}" onclick="vote('${post.id}', 'pass')" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${passClass}">
                                     <span>❓ パス</span>
                                     <span class="font-bold ml-1">${passCount}</span>
@@ -211,6 +225,7 @@
             });
         }
 
+        // 新規投稿処理
         async function submitPost() {
             const textInput = document.getElementById('postText').value.trim();
             const errorElement = document.getElementById('errorMsg');
@@ -223,23 +238,16 @@
                 return;
             }
 
-            if (errorElement) {
-                errorElement.classList.add('hidden');
-            }
+            if (errorElement) errorElement.classList.add('hidden');
 
             document.getElementById('submitBtn').disabled = true;
             document.getElementById('loadingMsg').classList.remove('hidden');
-
-            const payload = {
-                action: 'post',
-                text: textInput
-            };
 
             try {
                 await fetch(GAS_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({ action: 'post', text: textInput })
                 });
                 
                 document.getElementById('postText').value = '';
@@ -256,8 +264,8 @@
             }
         }
 
+        // 投票（トグル・変更）処理
         async function vote(postId, clickedType) {
-            // 連打防止：該当ボタンをロック
             const agreeBtn = document.getElementById(`agree-btn-${postId}`);
             const disagreeBtn = document.getElementById(`disagree-btn-${postId}`);
             const passBtn = document.getElementById(`pass-btn-${postId}`);
@@ -265,25 +273,21 @@
             if (disagreeBtn) disagreeBtn.disabled = true;
             if (passBtn) passBtn.disabled = true;
 
-            const currentVote = localStorage.getItem('voted_' + postId); // 'agree', 'disagree', 'pass', or null
+            const currentVote = localStorage.getItem('voted_' + postId);
             let deltaAgree = 0;
             let deltaDisagree = 0;
             let deltaPass = 0;
 
             if (currentVote === clickedType) {
-                // 【パターン1: 同じボタンを再クリック】➔ リセット
                 if (clickedType === 'agree') deltaAgree = -1;
                 if (clickedType === 'disagree') deltaDisagree = -1;
                 if (clickedType === 'pass') deltaPass = -1;
                 localStorage.removeItem('voted_' + postId);
             } else {
-                // 【パターン2: 新規または切り替え】
-                // 既存の投票を引く
                 if (currentVote === 'agree') deltaAgree = -1;
                 if (currentVote === 'disagree') deltaDisagree = -1;
                 if (currentVote === 'pass') deltaPass = -1;
 
-                // 新しい投票を足す
                 if (clickedType === 'agree') deltaAgree += 1;
                 if (clickedType === 'disagree') deltaDisagree += 1;
                 if (clickedType === 'pass') deltaPass += 1;
@@ -291,7 +295,6 @@
                 localStorage.setItem('voted_' + postId, clickedType);
             }
 
-            // ローカルで即座に計算してUI反映
             const postObj = currentPosts.find(p => p.id === postId);
             if (postObj) {
                 postObj.agree = Math.max(0, (Number(postObj.agree) || 0) + deltaAgree);
@@ -300,24 +303,120 @@
             }
             sortAndRenderPosts();
 
-            // GASへデータ送信
-            const payload = {
-                action: 'vote',
-                id: postId,
-                deltaAgree: deltaAgree,
-                deltaDisagree: deltaDisagree,
-                deltaPass: deltaPass
-            };
-
             try {
                 await fetch(GAS_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({
+                        action: 'vote',
+                        id: postId,
+                        deltaAgree: deltaAgree,
+                        deltaDisagree: deltaDisagree,
+                        deltaPass: deltaPass
+                    })
                 });
             } catch (error) {
                 console.error("投票送信エラー:", error);
             }
+        }
+
+        // 🗺️ Chart.js 意見マップ（散布図）の更新
+        function updateChart(posts) {
+            const canvas = document.getElementById('opinionMapCanvas');
+            if (!canvas) return;
+
+            const plotData = posts.map(post => {
+                const agree = Number(post.agree) || 0;
+                const disagree = Number(post.disagree) || 0;
+                const pass = Number(post.pass) || 0;
+                const totalVotes = agree + disagree + pass;
+                const opinionVotes = agree + disagree;
+                
+                const agreeRate = opinionVotes > 0 ? Math.round((agree / opinionVotes) * 100) : 50;
+
+                let color = '#3b82f6'; // デフォルト：青
+                if (totalVotes >= 3) {
+                    if (agreeRate >= 80) color = '#10b981'; // 合意点：緑
+                    else if (agreeRate >= 40 && agreeRate <= 60) color = '#f59e0b'; // 対立点：オレンジ
+                }
+
+                return {
+                    x: agreeRate,
+                    y: totalVotes,
+                    postId: post.id,
+                    text: post.text || '',
+                    agree: agree,
+                    disagree: disagree,
+                    pass: pass,
+                    color: color
+                };
+            });
+
+            const maxVotes = Math.max(...plotData.map(d => d.y), 5);
+
+            if (opinionChart) {
+                opinionChart.destroy();
+            }
+
+            const ctx = canvas.getContext('2d');
+            opinionChart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: '意見',
+                        data: plotData,
+                        backgroundColor: plotData.map(d => d.color),
+                        pointRadius: 8,
+                        pointHoverRadius: 12
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const point = context.raw;
+                                    const shortText = point.text.length > 25 ? point.text.substring(0, 25) + '...' : point.text;
+                                    return `「${shortText}」 (賛成率: ${point.x}%, 投票数: ${point.y})`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            min: 0,
+                            max: 100,
+                            title: { display: true, text: '賛成率 (%)', color: '#6b7280' },
+                            grid: { color: '#e5e7eb' }
+                        },
+                        y: {
+                            min: 0,
+                            max: maxVotes + 1,
+                            title: { display: true, text: '注目度 (総投票数)', color: '#6b7280' },
+                            ticks: { stepSize: 1 },
+                            grid: { color: '#e5e7eb' }
+                        }
+                    },
+                    onClick: (e, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const clickedPoint = plotData[index];
+                            if (clickedPoint && clickedPoint.postId) {
+                                const targetCard = document.getElementById(`card-${clickedPoint.postId}`);
+                                if (targetCard) {
+                                    targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    targetCard.classList.remove('highlight-card');
+                                    void targetCard.offsetWidth; // リフロー発生させてアニメーション再適用
+                                    targetCard.classList.add('highlight-card');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         }
 
         function escapeHTML(str) {
