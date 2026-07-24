@@ -132,13 +132,13 @@
 
     <script>
         // ★★★重要★★★：ご自身のGAS「WebアプリのURL」を設定してください
-        const GAS_URL = 'https://script.google.com/macros/s/AKfycbyksGxj5uNrCXExI3mjc25RyMV28eUJTv2NYq_rKmjptpxi3uLe47Dl1A-u1BOD5djztQ/exec';
+        const GAS_URL = 'YOUR_GAS_WEB_APP_URL_HERE';
 
         let userId = '';
         let currentPosts = [];
         let currentVotes = [];
         let userVoteMap = {}; // local vote state cache: { postId: voteValue }
-        let isProcessing = false; // 連続操作防止用フラグ
+        let pendingVotes = {}; // バックグラウンド送信中の状態管理 { postId: voteValue }
 
         // クラスタ分析データ格納用
         let clusterAnalysis = {
@@ -522,46 +522,65 @@
         }
 
         // 投票処理 (1: 賛成, -1: 反対, 0: パス)
-        async function vote(postId, targetVoteValue) {
-            if (isProcessing) return; // 処理中の重複実行を防止
-            isProcessing = true;
-
-            const currentVoteVal = userVoteMap[String(postId)];
+        function vote(postId, targetVoteValue) {
+            const pIdStr = String(postId);
+            const currentVoteVal = userVoteMap[pIdStr];
             let newVoteValue = null;
 
             // すでに同じボタンが押されている場合は取り消し (null)
             if (currentVoteVal === targetVoteValue) {
                 newVoteValue = null;
-                delete userVoteMap[String(postId)];
             } else {
                 newVoteValue = targetVoteValue;
-                userVoteMap[String(postId)] = targetVoteValue;
             }
 
-            // 楽観的UI更新
+            // 1. ローカルのカウント数＆投票状態を【即時更新】（待ち時間0秒）
+            const post = currentPosts.find(p => String(p.id) === pIdStr);
+            if (post) {
+                // 旧投票のカウント減算
+                if (currentVoteVal === 1) post.agree = Math.max(0, (Number(post.agree) || 0) - 1);
+                if (currentVoteVal === -1) post.disagree = Math.max(0, (Number(post.disagree) || 0) - 1);
+                if (currentVoteVal === 0) post.pass = Math.max(0, (Number(post.pass) || 0) - 1);
+
+                // 新投票のカウント加算
+                if (newVoteValue === 1) post.agree = (Number(post.agree) || 0) + 1;
+                if (newVoteValue === -1) post.disagree = (Number(post.disagree) || 0) + 1;
+                if (newVoteValue === 0) post.pass = (Number(post.pass) || 0) + 1;
+            }
+
+            // 状態キャッシュ更新
+            if (newVoteValue === null) {
+                delete userVoteMap[pIdStr];
+            } else {
+                userVoteMap[pIdStr] = newVoteValue;
+            }
+
+            // 画面表示とマップ分析を即座に再描画
+            runClusteringAnalysis();
             sortAndRenderPosts();
-            showLoading('投票を送信・データ更新中です...');
+            updateOpinionMap();
+            updateClusterMap();
 
-            try {
-                await fetch(GAS_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({
-                        action: 'vote',
-                        userId: userId,
-                        id: postId,
-                        voteValue: newVoteValue
-                    })
-                });
-                
-                // 最新データをバックグラウンド的に再読み込み
-                await loadPosts(true);
-            } catch (error) {
-                console.error("投票送信エラー:", error);
-            } finally {
-                isProcessing = false;
+            // 2. バックグラウンドでGASへ送信（画面をブロックしない）
+            showLoading('同期中...');
+            
+            fetch(GAS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                    action: 'vote',
+                    userId: userId,
+                    id: postId,
+                    voteValue: newVoteValue
+                })
+            }).then(response => {
+                // 送信成功時：静かにローディングを閉じる
                 hideLoading();
-            }
+            }).catch(error => {
+                console.error("投票送信エラー:", error);
+                hideLoading();
+                // ※万が一失敗した場合は、次回ページ読み込み時に同期されます
+            });
         }
 
         // タブ切り替え制御
