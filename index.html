@@ -105,6 +105,7 @@
             <div class="flex items-center space-x-2">
                 <label for="sortOrder" class="text-sm font-medium text-gray-600">並び替え:</label>
                 <select id="sortOrder" onchange="sortAndRenderPosts()" class="bg-white border border-gray-300 rounded-md text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <option value="unvoted_newest">未投票を優先（新着順）</option>
                     <option value="newest">新しい順</option>
                     <option value="oldest">古い順</option>
                     <option value="cross_consensus">🌟 グループを超えた合意点優先</option>
@@ -132,7 +133,7 @@
 
     <script>
         // ★★★重要★★★：ご自身のGAS「WebアプリのURL」を設定してください
-        const GAS_URL = 'https://script.google.com/macros/s/AKfycbyksGxj5uNrCXExI3mjc25RyMV28eUJTv2NYq_rKmjptpxi3uLe47Dl1A-u1BOD5djztQ/exec';
+        const GAS_URL = 'YOUR_GAS_WEB_APP_URL_HERE';
 
         let userId = '';
         let currentPosts = [];
@@ -338,7 +339,7 @@
         function sortAndRenderPosts() {
             if (!currentPosts) currentPosts = [];
 
-            const sortValue = document.getElementById('sortOrder')?.value || 'newest';
+            const sortValue = document.getElementById('sortOrder')?.value || 'unvoted_newest';
 
             const sortedPosts = [...currentPosts].sort((a, b) => {
                 const totalA = (Number(a.agree) || 0) + (Number(a.disagree) || 0) + (Number(a.pass) || 0);
@@ -356,6 +357,18 @@
 
                 const dateA = new Date(a.timestamp).getTime() || 0;
                 const dateB = new Date(b.timestamp).getTime() || 0;
+
+                // ユーザーが未投票かどうかを判定 (userVoteMap に id が存在しなければ未投票)
+                const isUnvotedA = userVoteMap[String(a.id)] === undefined ? 1 : 0;
+                const isUnvotedB = userVoteMap[String(b.id)] === undefined ? 1 : 0;
+
+
+                if (sortValue === 'unvoted_newest') {
+                    // 1. まず未投票かどうかで比較 (未投票=1 が上)
+                    if (isUnvotedB !== isUnvotedA) return isUnvotedB - isUnvotedA;
+                    // 2. 両方未投票、または両方投票済みの場合は新しい順で比較
+                    return dateB - dateA;
+                }
 
                 if (sortValue === 'cross_consensus') return isCrossB - isCrossA || totalB - totalA;
                 if (sortValue === 'newest') return dateB - dateA;
