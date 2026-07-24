@@ -121,6 +121,15 @@
         </div>
     </div>
 
+    <!-- 🔄 フローティング・ローディング通知（新規追加） -->
+    <div id="globalLoading" class="fixed bottom-5 right-5 bg-gray-900/90 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center space-x-3 z-50 transition-all duration-300 opacity-0 pointer-events-none transform translate-y-2">
+        <svg class="animate-spin h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span id="globalLoadingText" class="text-sm font-medium">データ更新中です...</span>
+    </div>
+
     <script>
         // ★★★重要★★★：ご自身のGAS「WebアプリのURL」を設定してください
         const GAS_URL = 'https://script.google.com/macros/s/AKfycbyksGxj5uNrCXExI3mjc25RyMV28eUJTv2NYq_rKmjptpxi3uLe47Dl1A-u1BOD5djztQ/exec';
@@ -129,6 +138,7 @@
         let currentPosts = [];
         let currentVotes = [];
         let userVoteMap = {}; // local vote state cache: { postId: voteValue }
+        let isProcessing = false; // 連続操作防止用フラグ
 
         // クラスタ分析データ格納用
         let clusterAnalysis = {
@@ -157,12 +167,33 @@
             return id;
         }
 
+        // 🔄 ローディング表示の制御ヘルパー関数
+        function showLoading(text = 'データ更新中です...') {
+            const el = document.getElementById('globalLoading');
+            const textEl = document.getElementById('globalLoadingText');
+            if (el && textEl) {
+                textEl.innerText = text;
+                el.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-2');
+                el.classList.add('opacity-100', 'translate-y-0');
+            }
+        }
+
+        function hideLoading() {
+            const el = document.getElementById('globalLoading');
+            if (el) {
+                el.classList.remove('opacity-100', 'translate-y-0');
+                el.classList.add('opacity-0', 'pointer-events-none', 'translate-y-2');
+            }
+        }
+
         // データの読み込み
-        async function loadPosts() {
+        async function loadPosts(isBackground = false) {
             if (!GAS_URL || GAS_URL === 'YOUR_GAS_WEB_APP_URL_HERE') {
                 document.getElementById('postsContainer').innerHTML = '<p class="text-red-500 text-center">※GASのURLが設定されていません。コード内の GAS_URL を変更してください。</p>';
                 return;
             }
+
+            if (!isBackground) showLoading('データを最新に更新中...');
 
             try {
                 const response = await fetch(GAS_URL);
@@ -191,6 +222,8 @@
             } catch (error) {
                 console.error("エラー:", error);
                 document.getElementById('postsContainer').innerHTML = '<p class="text-red-500 text-center">データの読み込みに失敗しました。</p>';
+            } finally {
+                hideLoading();
             }
         }
 
@@ -427,15 +460,15 @@
                         <div class="flex justify-between items-center text-sm flex-wrap gap-2">
                             <span class="text-gray-400 text-xs">${dateStr}</span>
                             <div class="flex space-x-2 flex-wrap gap-1">
-                                <button id="agree-btn-${post.id}" onclick="vote('${post.id}', 1)" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${agreeClass}">
+                                <button id="agree-btn-${post.id}" onclick="vote('${post.id}', 1)" class="vote-btn flex items-center space-x-1 px-3 py-1.5 rounded transition ${agreeClass}">
                                     <span>👍 賛成</span>
                                     <span class="font-bold ml-1">${agreeCount}</span>
                                 </button>
-                                <button id="disagree-btn-${post.id}" onclick="vote('${post.id}', -1)" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${disagreeClass}">
+                                <button id="disagree-btn-${post.id}" onclick="vote('${post.id}', -1)" class="vote-btn flex items-center space-x-1 px-3 py-1.5 rounded transition ${disagreeClass}">
                                     <span>👎 反対</span>
                                     <span class="font-bold ml-1">${disagreeCount}</span>
                                 </button>
-                                <button id="pass-btn-${post.id}" onclick="vote('${post.id}', 0)" class="flex items-center space-x-1 px-3 py-1.5 rounded transition ${passClass}">
+                                <button id="pass-btn-${post.id}" onclick="vote('${post.id}', 0)" class="vote-btn flex items-center space-x-1 px-3 py-1.5 rounded transition ${passClass}">
                                     <span>❓ パス</span>
                                     <span class="font-bold ml-1">${passCount}</span>
                                 </button>
@@ -464,6 +497,7 @@
 
             document.getElementById('submitBtn').disabled = true;
             document.getElementById('loadingMsg').classList.remove('hidden');
+            showLoading('新しい意見を送信中です...');
 
             try {
                 await fetch(GAS_URL, {
@@ -473,7 +507,7 @@
                 });
                 
                 document.getElementById('postText').value = '';
-                await loadPosts();
+                await loadPosts(true);
             } catch (error) {
                 console.error("投稿エラー:", error);
                 if (errorElement) {
@@ -483,11 +517,15 @@
             } finally {
                 document.getElementById('submitBtn').disabled = false;
                 document.getElementById('loadingMsg').classList.add('hidden');
+                hideLoading();
             }
         }
 
         // 投票処理 (1: 賛成, -1: 反対, 0: パス)
         async function vote(postId, targetVoteValue) {
+            if (isProcessing) return; // 処理中の重複実行を防止
+            isProcessing = true;
+
             const currentVoteVal = userVoteMap[String(postId)];
             let newVoteValue = null;
 
@@ -502,6 +540,7 @@
 
             // 楽観的UI更新
             sortAndRenderPosts();
+            showLoading('投票を送信・データ更新中です...');
 
             try {
                 await fetch(GAS_URL, {
@@ -515,10 +554,13 @@
                     })
                 });
                 
-                // 最新データを再読み込み
-                await loadPosts();
+                // 最新データをバックグラウンド的に再読み込み
+                await loadPosts(true);
             } catch (error) {
                 console.error("投票送信エラー:", error);
+            } finally {
+                isProcessing = false;
+                hideLoading();
             }
         }
 
