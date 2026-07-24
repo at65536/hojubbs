@@ -36,36 +36,6 @@
             </div>
         </header>
 
-        <!-- 🤖 AI論点整理セクション -->
-        <div class="bg-gradient-to-r from-purple-900 to-indigo-900 text-white p-5 rounded-lg shadow-md mb-8 border border-purple-700">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <div>
-                    <h2 class="text-lg font-bold flex items-center gap-2">
-                        <span>🤖</span> AI全自動ファシリテーター
-                    </h2>
-                    <p class="text-xs text-purple-200 mt-1">
-                        AI（Gemini）が参加者の意見と投票結果（合意点・対立点）を総合的に分析し、まとめたレポートを生成します。
-                    </p>
-                </div>
-                <button id="aiSummaryBtn" onclick="generateAiSummary()" class="bg-purple-500 hover:bg-purple-600 text-white text-sm font-bold py-2.5 px-5 rounded-lg shadow transition duration-200 whitespace-nowrap flex items-center gap-2">
-                    <span>✨ 論点・合意案を要約</span>
-                </button>
-            </div>
-
-            <!-- AI生成結果の表示エリア -->
-            <div id="aiSummaryResult" class="mt-4 pt-4 border-t border-purple-700/60 hidden">
-                <div id="aiSummaryLoading" class="flex items-center space-x-3 text-purple-200 text-sm py-3 hidden">
-                    <svg class="animate-spin h-5 w-5 text-purple-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>AIが議論データとグループ構成を分析してレポートを作成しています...（10秒程度かかります）</span>
-                </div>
-                <div id="aiSummaryContent" class="text-sm bg-purple-950/70 p-4 rounded-lg leading-relaxed whitespace-pre-wrap font-sans border border-purple-800 text-purple-100">
-                </div>
-            </div>
-        </div>
-
         <!-- 投稿フォーム -->
         <div class="bg-white p-6 rounded-lg shadow-sm mb-8 border border-gray-200">
             <h2 class="text-lg font-semibold mb-3">新しい意見を投稿する</h2>
@@ -112,7 +82,7 @@
             <div id="clusterTabView" class="hidden">
                 <div class="mb-3">
                     <p class="text-xs text-gray-600 mb-1">
-                        AI（機械学習）が投票パターンを分析し、似た意見傾向を持つ参加者をゆるやかにグループ化しています。
+                        プログラムが投票パターンを分析し、似た意見傾向を持つ参加者をゆるやかにグループ化しています。
                     </p>
                     <div id="clusterSummaryInfo" class="text-xs font-semibold text-blue-800 bg-blue-50 p-2 rounded">
                         データを分析中...
@@ -167,14 +137,14 @@
         let userId = '';
         let currentPosts = [];
         let currentVotes = [];
-        let userVoteMap = {}; // local vote state cache: { postId: voteValue }
+        let userVoteMap = {}; 
 
         // クラスタ分析データ格納用
         let clusterAnalysis = {
             groupAUserIds: [],
             groupBUserIds: [],
             crossConsensusPostIds: [],
-            userCoordinates: {} // { userId: { x, y, group } }
+            userCoordinates: {}
         };
 
         let opinionChart = null;
@@ -186,7 +156,6 @@
             loadPosts();
         };
 
-        // 匿名ユーザーIDの管理 (localStorage)
         function getOrCreateUserId() {
             let id = localStorage.getItem('polis_user_id');
             if (!id) {
@@ -196,7 +165,6 @@
             return id;
         }
 
-        // ローディング表示の制御ヘルパー関数
         function showLoading(text = 'データ更新中です...') {
             const el = document.getElementById('globalLoading');
             const textEl = document.getElementById('globalLoadingText');
@@ -215,7 +183,6 @@
             }
         }
 
-        // データの読み込み
         async function loadPosts(isBackground = false) {
             if (!GAS_URL || GAS_URL === 'YOUR_GAS_WEB_APP_URL_HERE') {
                 document.getElementById('postsContainer').innerHTML = '<p class="text-red-500 text-center">※GASのURLが設定されていません。コード内の GAS_URL を変更してください。</p>';
@@ -228,11 +195,9 @@
                 const response = await fetch(GAS_URL);
                 const data = await response.json();
                 
-                // データ格納
                 currentPosts = data.posts || [];
                 currentVotes = data.votes || [];
 
-                // 自分の投票状態キャッシュの構築
                 userVoteMap = {};
                 currentVotes.forEach(v => {
                     if (String(v.userId) === String(userId)) {
@@ -240,10 +205,7 @@
                     }
                 });
 
-                // クラスタリング計算実行
                 runClusteringAnalysis();
-
-                // 描画更新
                 sortAndRenderPosts();
                 updateOpinionMap();
                 updateClusterMap();
@@ -256,14 +218,13 @@
             }
         }
 
-        // クラスタリング分析エンジン (ブラウザ側で計算)
+        // クラスタリング分析エンジン (ブラウザ側計算)
         function runClusteringAnalysis() {
             if (!currentPosts || currentPosts.length === 0 || !currentVotes || currentVotes.length === 0) {
                 document.getElementById('clusterSummaryInfo').innerText = "投票データが蓄積されると、ここに意見グループが表示されます。";
                 return;
             }
 
-            // 1. ユニークユーザーの抽出
             const userSet = new Set(currentVotes.map(v => String(v.userId)));
             const userList = Array.from(userSet);
             const postList = currentPosts.map(p => String(p.id));
@@ -273,7 +234,6 @@
                 return;
             }
 
-            // 2. 「ユーザー × 投稿」 行列の構築
             const matrix = userList.map(uId => {
                 return postList.map(pId => {
                     const found = currentVotes.find(v => String(v.userId) === uId && String(v.postId) === pId);
@@ -281,7 +241,6 @@
                 });
             });
 
-            // 3. 簡易 K-Means (2グループに分類)
             let centroidA = matrix[0];
             let centroidB = matrix[Math.floor(matrix.length / 2)] || matrix[0];
 
@@ -310,7 +269,6 @@
             clusterAnalysis.groupAUserIds = groupAUsers;
             clusterAnalysis.groupBUserIds = groupBUsers;
 
-            // 4. 2次元座標化
             clusterAnalysis.userCoordinates = {};
             userList.forEach((uId, idx) => {
                 const vec = matrix[idx];
@@ -329,9 +287,7 @@
                 };
             });
 
-            // 5. 「超党派の合意点 (Cross-Group Consensus)」の分析
             clusterAnalysis.crossConsensusPostIds = [];
-            
             if (groupAUsers.length > 0 && groupBUsers.length > 0) {
                 currentPosts.forEach(post => {
                     const pId = String(post.id);
@@ -379,28 +335,21 @@
             return mean.map(v => v / targetUserIds.length);
         }
 
-        // 並び替え処理
         function sortAndRenderPosts() {
             if (!currentPosts) currentPosts = [];
 
             const sortValue = document.getElementById('sortOrder')?.value || 'newest';
 
             const sortedPosts = [...currentPosts].sort((a, b) => {
-                const agreeA = Number(a.agree) || 0;
-                const disagreeA = Number(a.disagree) || 0;
-                const passA = Number(a.pass) || 0;
-                const totalA = agreeA + disagreeA + passA;
-                const opinionTotalA = agreeA + disagreeA;
-                const agreeRateA = opinionTotalA > 0 ? (agreeA / opinionTotalA) : 0;
-                const disagreeRateA = opinionTotalA > 0 ? (disagreeA / opinionTotalA) : 0;
+                const totalA = (Number(a.agree) || 0) + (Number(a.disagree) || 0) + (Number(a.pass) || 0);
+                const opinionTotalA = (Number(a.agree) || 0) + (Number(a.disagree) || 0);
+                const agreeRateA = opinionTotalA > 0 ? ((Number(a.agree) || 0) / opinionTotalA) : 0;
+                const disagreeRateA = opinionTotalA > 0 ? ((Number(a.disagree) || 0) / opinionTotalA) : 0;
 
-                const agreeB = Number(b.agree) || 0;
-                const disagreeB = Number(b.disagree) || 0;
-                const passB = Number(b.pass) || 0;
-                const totalB = agreeB + disagreeB + passB;
-                const opinionTotalB = agreeB + disagreeB;
-                const agreeRateB = opinionTotalB > 0 ? (agreeB / opinionTotalB) : 0;
-                const disagreeRateB = opinionTotalB > 0 ? (disagreeB / opinionTotalB) : 0;
+                const totalB = (Number(b.agree) || 0) + (Number(b.disagree) || 0) + (Number(b.pass) || 0);
+                const opinionTotalB = (Number(b.agree) || 0) + (Number(b.disagree) || 0);
+                const agreeRateB = opinionTotalB > 0 ? ((Number(b.agree) || 0) / opinionTotalB) : 0;
+                const disagreeRateB = opinionTotalB > 0 ? ((Number(b.disagree) || 0) / opinionTotalB) : 0;
 
                 const isCrossA = clusterAnalysis.crossConsensusPostIds.includes(String(a.id)) ? 1 : 0;
                 const isCrossB = clusterAnalysis.crossConsensusPostIds.includes(String(b.id)) ? 1 : 0;
@@ -420,7 +369,6 @@
             renderPosts(sortedPosts);
         }
 
-        // 投稿カードHTML描画
         function renderPosts(posts) {
             const container = document.getElementById('postsContainer');
             container.innerHTML = '';
@@ -497,7 +445,6 @@
             });
         }
 
-        // 新規投稿処理
         async function submitPost() {
             const textInput = document.getElementById('postText').value.trim();
             const errorElement = document.getElementById('errorMsg');
@@ -538,7 +485,6 @@
             }
         }
 
-        // 投票処理 (1: 賛成, -1: 反対, 0: パス) - 楽観的UI更新
         function vote(postId, targetVoteValue) {
             const pIdStr = String(postId);
             const currentVoteVal = userVoteMap[pIdStr];
@@ -591,53 +537,6 @@
             });
         }
 
-        // 🤖 AIによる論点・合意案の自動生成リクエスト
-        async function generateAiSummary() {
-            const resultBox = document.getElementById('aiSummaryResult');
-            const loadingBox = document.getElementById('aiSummaryLoading');
-            const contentBox = document.getElementById('aiSummaryContent');
-            const btn = document.getElementById('aiSummaryBtn');
-
-            if (!currentPosts || currentPosts.length === 0) {
-                alert("AI分析を行うための投稿データがありません。");
-                return;
-            }
-
-            resultBox.classList.remove('hidden');
-            loadingBox.classList.remove('hidden');
-            contentBox.innerText = '';
-            btn.disabled = true;
-            btn.classList.add('opacity-50');
-
-            try {
-                const response = await fetch(GAS_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({
-                        action: 'summarize',
-                        posts: currentPosts,
-                        clusterData: clusterAnalysis
-                    })
-                });
-
-                const data = await response.json();
-                
-                if (data.status === 'success' && data.summary) {
-                    contentBox.innerText = data.summary;
-                } else {
-                    contentBox.innerText = "AIによる分析結果の生成に失敗しました: " + (data.message || '未知のエラー');
-                }
-            } catch (error) {
-                console.error("AI分析エラー:", error);
-                contentBox.innerText = "通信エラーが発生しました。GASのデプロイ状態やGemini APIキーの設定をご確認ください。";
-            } finally {
-                loadingBox.classList.add('hidden');
-                btn.disabled = false;
-                btn.classList.remove('opacity-50');
-            }
-        }
-
-        // タブ切り替え制御
         function switchMapTab(tabType) {
             const opBtn = document.getElementById('tabOpinionBtn');
             const clBtn = document.getElementById('tabClusterBtn');
@@ -657,7 +556,6 @@
             }
         }
 
-        // 🗺️ Chart.js 1: 意見マップ (投稿ベース)
         function updateOpinionMap() {
             const canvas = document.getElementById('opinionMapCanvas');
             if (!canvas) return;
@@ -732,7 +630,6 @@
             });
         }
 
-        // 🗺️ Chart.js 2: 参加者クラスタリングマップ
         function updateClusterMap() {
             const canvas = document.getElementById('clusterMapCanvas');
             if (!canvas) return;
